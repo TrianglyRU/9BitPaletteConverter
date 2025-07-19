@@ -10,43 +10,66 @@ namespace ConsoleApp1
     internal class Program
     {
         static readonly int[] allowedValues = { 0, 36, 73, 109, 146, 182, 219, 255 };
+        static readonly string lastPathFile = "last_path.txt";
+
 
         static void Main(string[] args)
         {
             Console.OutputEncoding = Encoding.UTF8;
 
-            string folderPath = args.Length > 0 ? args[0] : PromptForFolderPath();
-
-            while (!Directory.Exists(folderPath) || !IsSpritesFolder(folderPath))
+            while (true)
             {
-                Console.WriteLine("Invalid folder path or folder is not named 'sprites'. Please try again.");
-                folderPath = PromptForFolderPath();
+                string savedPath = File.Exists(lastPathFile) ? File.ReadAllText(lastPathFile).Trim() : null;
+                bool savedPathExists = !string.IsNullOrEmpty(savedPath) && Directory.Exists(savedPath);
+
+                if (savedPathExists)
+                {
+                    Console.WriteLine($"Found a folder: {savedPath}");
+                    Console.WriteLine("Leave the input empty to use the saved folder, or drag/drop or enter a new folder path, then press Enter to process the images:");
+                }
+                else
+                {
+                    Console.WriteLine("Please enter the path to the folder or drag/drop it here, then press Enter:");
+                }
+
+                string input = Console.ReadLine().Trim();
+                string folderPath = string.IsNullOrEmpty(input) ? savedPath : input;
+
+                if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath))
+                {
+                    Console.WriteLine("Invalid or missing folder path. Press Enter to try again.");
+                    Console.ReadLine();
+                    Console.Clear();
+                    continue;
+                }
+
+                try
+                {
+                    File.WriteAllText(lastPathFile, folderPath);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: Could not save path to {lastPathFile}: {ex.Message}");
+                }
+
+                string outputRoot = folderPath + "_converted";
+                ProcessImages(folderPath, outputRoot);
+
+                Console.WriteLine("\nConversion completed.");
+                Console.WriteLine("Press Enter to convert another folder...");
+                Console.ReadLine();
+                Console.Clear();
             }
-
-            ProcessImages(folderPath);
-            Console.WriteLine("Processing completed. Press Enter to exit...");
-            Console.ReadLine();
         }
 
-        static string PromptForFolderPath()
+        static void ProcessImages(string inputRoot, string outputRoot)
         {
-            Console.WriteLine("Please enter the path to the folder with images or drag the folder here:");
-            return Console.ReadLine();
-        }
-
-        static bool IsSpritesFolder(string folderPath)
-        {
-            return Path.GetFileName(folderPath).Equals("sprites", StringComparison.OrdinalIgnoreCase);
-        }
-
-        static void ProcessImages(string directory)
-        {
-            var imageFiles = Directory.GetFiles(directory, "*.*", SearchOption.AllDirectories);
+            var imageFiles = Directory.GetFiles(inputRoot, "*.*", SearchOption.AllDirectories);
             Parallel.ForEach(imageFiles, filePath =>
             {
                 if (IsImageFile(filePath))
                 {
-                    ProcessImage(filePath);
+                    ProcessImage(filePath, inputRoot, outputRoot);
                 }
             });
         }
@@ -55,13 +78,14 @@ namespace ConsoleApp1
             filePath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
             filePath.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
             filePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+            filePath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ||
             filePath.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase);
 
-        static void ProcessImage(string filePath)
+        static void ProcessImage(string filePath, string inputRoot, string outputRoot)
         {
             try
             {
-                string modifiedFilePath = GetModifiedFilePath(filePath);
+                string modifiedFilePath = GetModifiedFilePath(filePath, inputRoot, outputRoot);
 
                 using (Bitmap originalBitmap = new Bitmap(filePath))
                 {
@@ -80,20 +104,32 @@ namespace ConsoleApp1
                             {
                                 Color originalColor = bitmapToProcess.GetPixel(x, y);
                                 Color newColor = Color.FromArgb(originalColor.A, GetNearestValue(originalColor.R), GetNearestValue(originalColor.G), GetNearestValue(originalColor.B));
-
                                 bitmapToProcess.SetPixel(x, y, newColor);
                             }
                         }
 
                         bitmapToProcess.Save(modifiedFilePath);
-                        Console.WriteLine($"Processed image: {modifiedFilePath}");
+                        Console.WriteLine($"Converted {modifiedFilePath}");
                     }
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error processing file {filePath}: {ex.Message}");
+                Console.WriteLine($"Error converting file {filePath}: {ex.Message}");
             }
+        }
+        static string GetModifiedFilePath(string originalPath, string inputRoot, string outputRoot)
+        {
+            string relativePath = Path.GetRelativePath(inputRoot, originalPath);
+            string modifiedPath = Path.Combine(outputRoot, relativePath);
+            string modifiedDirectory = Path.GetDirectoryName(modifiedPath);
+
+            if (!Directory.Exists(modifiedDirectory))
+            {
+                Directory.CreateDirectory(modifiedDirectory);
+            }
+
+            return modifiedPath;
         }
 
         static bool IsIndexedPixelFormat(PixelFormat pixelFormat)
@@ -112,26 +148,8 @@ namespace ConsoleApp1
             return newBitmap;
         }
 
-        static string GetModifiedFilePath(string originalPath)
-        {
-            string modifiedPath = originalPath.Replace("sprites", "sprites_modified");
-            string modifiedDirectory = Path.GetDirectoryName(modifiedPath);
-
-            if (!Directory.Exists(modifiedDirectory))
-            {
-                Directory.CreateDirectory(modifiedDirectory);
-            }
-
-            return modifiedPath;
-        }
-
         static int GetNearestValue(int channel)
         {
-            if (channel % 32 == 0)
-            {
-                return channel;
-            }
-
             int nearestValue = allowedValues[0];
             int minDifference = Math.Abs(channel - nearestValue);
 
