@@ -1,5 +1,5 @@
 ## Overview
-**9BitPaletteConverter** is a C# console application designed to convert image colours into the hexadecimal / RGB representation of the 9-bit palette format used by the Sega Mega Drive. It supports multiple image formats such as `.jpg`, `.jpeg`, `.png`, `.gif` and `.bmp`.
+**9BitPaletteConverter** is a C# console application designed to convert image colours into the 24-bit RGB representation of the 9-bit palette format used by the Sega Mega Drive. It supports multiple image formats such as `.jpg`, `.jpeg`, `.png`, `.gif` and `.bmp`.
 
 ### Theory
 The Sega Mega Drive's colour format is represented by a 12-bit mask in the form:
@@ -19,12 +19,11 @@ Where the fourth bit in each colour channel is always set to `0`. This allows to
 
 The Mega Drive ignores the fourth, eighth, and twelfth bits (which are zero), leaving just 9 bits, i.e. 3 bits for each colour channel (Red, Green, and Blue).
 
-Given that `111` is the brightest colour (#FFFFFF in hexadecimal or 255,255,255 in RGB), and since there are 7 unique combinations of 3 bits (excluding `000`), changing one bit roughly equals one step of:
+The maximum channel value, `111`, represents full intensity. When mapped to 24-bit RGB (8 bits per channel), this corresponds to a value of 255 (#FF). Since the 3-bit channel provides 8 discrete intensity levels, there are 7 steps between minimum and maximum, giving an approximate step size of:
 ```
 255 / 7 ≈ 36.4285
 ```
-Thus, the possible palette values are restricted to the following set (rounded to the nearest integer):
-
+Thus, when converted and rounded to the nearest integer, the possible palette values are:
 - 0
 - 36
 - 73
