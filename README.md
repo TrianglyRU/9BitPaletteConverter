@@ -35,7 +35,7 @@ Thus, the possible palette values are restricted to the following set (rounded t
 - 255
 
 #### Analogue Nature of the Mega Drive
-It's important to note that the Sega Mega Drive is an analogue console, meaning it doesn't output colours as fixed digital values. Instead, the colours are determined by the voltage and signal strength being sent to the display. As a result, the actual colours produced by the hardware can vary, appearing slightly "washed out" or even dimmed. For example, the colours on real hardware may look similar to those produced by the **BlastEm** emulator, which attempts to mimic these analogue imperfections.
+While the Sega Mega Drive defines its colours digitally, the console outputs video as an analogue signal. The final colours displayed therefore depend on the characteristics of the DAC, video encoder, cabling, and the display itself. As a result, the image can appear slightly washed out or dimmed. For example, the colours on real hardware may look similar to those produced by the **BlastEm** emulator, which attempts to mimic these analogue imperfections.
 
 ## Requirements
 - .NET 8 Runtime or ASP.NET Core Runtime
