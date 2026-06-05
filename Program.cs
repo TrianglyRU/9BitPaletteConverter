@@ -10,59 +10,60 @@ namespace ConsoleApp1
     internal class Program
     {
         static readonly int[] allowedValues = { 0, 36, 73, 109, 146, 182, 219, 255 };
-        static readonly string lastPathFile = "last_path.txt";
-
 
         static void Main(string[] args)
         {
             Console.OutputEncoding = Encoding.UTF8;
 
-            while (true)
+            if (args.Length == 0)
             {
-                string savedPath = File.Exists(lastPathFile) ? File.ReadAllText(lastPathFile).Trim() : null;
-                bool savedPathExists = !string.IsNullOrEmpty(savedPath) && Directory.Exists(savedPath);
+                Console.WriteLine("Drop files or a folder onto the .exe to convert");
+                Task.Delay(1000).Wait();
+                Environment.Exit(0);
+                return;
+            }
 
-                if (savedPathExists)
+            bool anyValid = false;
+
+            foreach (string path in args)
+            {
+                if (Directory.Exists(path))
                 {
-                    Console.WriteLine($"Found a folder: {savedPath}");
-                    Console.WriteLine("Leave the input empty to use the saved folder, or drag/drop or enter a new folder path, then press Enter to process the images:");
+                    anyValid = true;
+                    ProcessFolder(path, path + "_converted");
+                }
+                else if (File.Exists(path))
+                {
+                    if (IsImageFile(path))
+                    {
+                        anyValid = true;
+                        ProcessSingleFile(path);
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Skipped (not an image): {path}");
+                    }
                 }
                 else
                 {
-                    Console.WriteLine("Please enter the path to the folder or drag/drop it here, then press Enter:");
+                    Console.WriteLine($"Not found: {path}");
                 }
+            }
 
-                string input = Console.ReadLine().Trim();
-                string folderPath = string.IsNullOrEmpty(input) ? savedPath : input;
-
-                if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath))
-                {
-                    Console.WriteLine("Invalid or missing folder path. Press Enter to try again.");
-                    Console.ReadLine();
-                    Console.Clear();
-                    continue;
-                }
-
-                try
-                {
-                    File.WriteAllText(lastPathFile, folderPath);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Warning: Could not save path to {lastPathFile}: {ex.Message}");
-                }
-
-                string outputRoot = folderPath + "_converted";
-                ProcessImages(folderPath, outputRoot);
-
-                Console.WriteLine("\nConversion completed.");
-                Console.WriteLine("Press Enter to convert another folder...");
-                Console.ReadLine();
-                Console.Clear();
+            if (!anyValid)
+            {
+                Console.WriteLine("No valid files or folders found");
+                Console.ReadKey();
+            }
+            else
+            {
+                Console.WriteLine("\nDone!");
+                Task.Delay(1000).Wait();
+                Environment.Exit(0);
             }
         }
 
-        static void ProcessImages(string inputRoot, string outputRoot)
+        static void ProcessFolder(string inputRoot, string outputRoot)
         {
             var imageFiles = Directory.GetFiles(inputRoot, "*.*", SearchOption.AllDirectories);
             Parallel.ForEach(imageFiles, filePath =>
@@ -74,19 +75,25 @@ namespace ConsoleApp1
             });
         }
 
-        static bool IsImageFile(string filePath) =>
-            filePath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
-            filePath.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
-            filePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
-            filePath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ||
-            filePath.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase);
+        static void ProcessSingleFile(string filePath)
+        {
+            string dir = Path.GetDirectoryName(filePath);
+            string nameWithoutExt = Path.GetFileNameWithoutExtension(filePath);
+            string ext = Path.GetExtension(filePath);
+            string outputPath = Path.Combine(dir, nameWithoutExt + "_converted" + ext);
+            ProcessImage(filePath, outputPath);
+        }
 
         static void ProcessImage(string filePath, string inputRoot, string outputRoot)
         {
+            string outputPath = GetModifiedFilePath(filePath, inputRoot, outputRoot);
+            ProcessImage(filePath, outputPath);
+        }
+
+        static void ProcessImage(string filePath, string outputPath)
+        {
             try
             {
-                string modifiedFilePath = GetModifiedFilePath(filePath, inputRoot, outputRoot);
-
                 using (Bitmap originalBitmap = new Bitmap(filePath))
                 {
                     Bitmap bitmapToProcess = originalBitmap;
@@ -98,18 +105,23 @@ namespace ConsoleApp1
 
                     using (bitmapToProcess)
                     {
+                        int max = GetMaxChannel(bitmapToProcess);
+                        double scale = (max == 224 || max == 238) ? 255.0 / max : 1.0;
+
                         for (int y = 0; y < bitmapToProcess.Height; y++)
                         {
                             for (int x = 0; x < bitmapToProcess.Width; x++)
                             {
                                 Color originalColor = bitmapToProcess.GetPixel(x, y);
-                                Color newColor = Color.FromArgb(originalColor.A, GetNearestValue(originalColor.R), GetNearestValue(originalColor.G), GetNearestValue(originalColor.B));
-                                bitmapToProcess.SetPixel(x, y, newColor);
+                                int r = GetNearestValue((int)Math.Round(originalColor.R * scale));
+                                int g = GetNearestValue((int)Math.Round(originalColor.G * scale));
+                                int b = GetNearestValue((int)Math.Round(originalColor.B * scale));
+                                bitmapToProcess.SetPixel(x, y, Color.FromArgb(originalColor.A, r, g, b));
                             }
                         }
 
-                        bitmapToProcess.Save(modifiedFilePath);
-                        Console.WriteLine($"Converted {modifiedFilePath}");
+                        bitmapToProcess.Save(outputPath);
+                        Console.WriteLine($"Converted {outputPath}");
                     }
                 }
             }
@@ -118,6 +130,23 @@ namespace ConsoleApp1
                 Console.WriteLine($"Error converting file {filePath}: {ex.Message}");
             }
         }
+
+        static int GetMaxChannel(Bitmap bitmap)
+        {
+            int max = 0;
+            for (int y = 0; y < bitmap.Height; y++)
+            {
+                for (int x = 0; x < bitmap.Width; x++)
+                {
+                    Color c = bitmap.GetPixel(x, y);
+                    if (c.R > max) max = c.R;
+                    if (c.G > max) max = c.G;
+                    if (c.B > max) max = c.B;
+                }
+            }
+            return max;
+        }
+
         static string GetModifiedFilePath(string originalPath, string inputRoot, string outputRoot)
         {
             string relativePath = Path.GetRelativePath(inputRoot, originalPath);
@@ -131,6 +160,13 @@ namespace ConsoleApp1
 
             return modifiedPath;
         }
+
+        static bool IsImageFile(string filePath) =>
+            filePath.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+            filePath.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+            filePath.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+            filePath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) ||
+            filePath.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase);
 
         static bool IsIndexedPixelFormat(PixelFormat pixelFormat)
         {
